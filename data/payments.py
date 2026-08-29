@@ -17,4 +17,4 @@ for _ in range(num_transactions):
     payment['time'] = f.date_time_this_year()
     payments.append(payment)
 
-pd.DataFrame(payments).to_csv("payments.csv", mode="a", index=False, header=True)
+pd.DataFrame(payments).to_csv("payments.csv",index=False)
