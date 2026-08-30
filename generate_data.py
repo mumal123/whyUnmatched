@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from faker import Faker
 import random
 import pandas as pd
@@ -50,7 +52,7 @@ def generate_bankStatements(payments,settlements):
         bank_statement["amount"] =  settlement["settlement_amount"]
         bank_statement["time"] = f.date_time_between(
             start_date=settlement["time"],
-            end_date="now"
+            end_date=settlement["time"] + timedelta(days=2)
         )
         bank_statements.append(bank_statement)
     pd.DataFrame(bank_statements).to_csv("data/bank_statements.csv",index=False)
