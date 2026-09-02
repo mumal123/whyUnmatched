@@ -10,6 +10,12 @@ def exact_match(bank_statements, settlements, settlement_delay_days=2):
     bank_statements["time"] = pd.to_datetime(bank_statements["time"])
     settlements["time"] = pd.to_datetime(settlements["time"])
 
+    # explicit tie-break: preserves the file's original row order (the
+    # original bank credit always appears before any duplicate copy),
+    # so ties on identical timestamps resolve deterministically instead
+    # of depending on merge/sort implementation details
+    bank_statements["_row_order"] = range(len(bank_statements))
+
     candidates = bank_statements.merge(
         settlements,
         left_on="amount", right_on="settlement_amount",
@@ -21,7 +27,7 @@ def exact_match(bank_statements, settlements, settlement_delay_days=2):
                 (candidates["time_bank"] <= window_end)
     candidates = candidates[in_window]
 
-    candidates = candidates.sort_values("time_bank")
+    candidates = candidates.sort_values(["time_bank", "_row_order"], kind="stable")
     candidates = candidates.drop_duplicates(subset="settlement_id", keep="first")
     candidates = candidates.drop_duplicates(subset="bank_statement_id", keep="first")
 
@@ -51,6 +57,7 @@ def exact_match(bank_statements, settlements, settlement_delay_days=2):
         "status": "MISSING_SETTLEMENT",
     }))
 
+    result_rows = [df for df in result_rows if not df.empty]
     result_df = pd.concat(result_rows, ignore_index=True)
     elapsed = time.perf_counter() - start_time
     return result_df, elapsed
@@ -67,4 +74,5 @@ if __name__ == "__main__":
     print(f"{n_records} records processed in {elapsed:.6f} seconds")
     print(f"Throughput: {n_records / elapsed:.2f} records/sec")
     print(result["status"].value_counts())
+
     result.to_csv("../data/exact_reconciliation.csv", index=False)

@@ -217,6 +217,51 @@ def inject_unmatched_bank_credits(bank_statements, count=15):
             "time": f.date_time_this_year(),
         })
     return bank_statements + stray_rows
+
+def inject_amount_collisions(payments, settlements, bank_statements, ground_truth, count=10):
+    # forces two DIFFERENT settlements to share the exact same amount and
+    # land within a couple days of each other — the one case amount+time
+    # matching can genuinely get wrong, and the one this dataset never
+    # naturally produces since payment_amount is drawn from such a wide
+    # range that real collisions are astronomically unlikely
+    settlement_by_payment = {s["payment_id"]: s for s in settlements}
+    truth_by_payment = {row["payment_id"]: row["truth"] for row in ground_truth}
+ 
+    eligible_payments = [
+        p for p in payments
+        if p["payment_id"] in settlement_by_payment
+        and truth_by_payment[p["payment_id"]] == "MATCH"
+    ]
+ 
+    collision_pairs = min(count, len(eligible_payments) // 2)
+    chosen = random.sample(eligible_payments, collision_pairs * 2)
+ 
+    bank_by_payment = {}
+    for b in bank_statements:
+        bank_by_payment.setdefault(b["payment_id"], []).append(b)
+ 
+    for i in range(0, len(chosen), 2):
+        payment_a, payment_b = chosen[i], chosen[i + 1]
+        settlement_a = settlement_by_payment[payment_a["payment_id"]]
+        settlement_b = settlement_by_payment[payment_b["payment_id"]]
+ 
+        # give both settlements + their bank credits the same amount,
+        # and push settlement_b's timing to sit close to settlement_a's
+        shared_amount = settlement_a["settlement_amount"]
+        settlement_b["settlement_amount"] = shared_amount
+        settlement_b["time"] = settlement_a["time"] + timedelta(hours=random.randint(1, 36))
+ 
+        for b in bank_by_payment.get(payment_a["payment_id"], []):
+            b["amount"] = shared_amount
+        for b in bank_by_payment.get(payment_b["payment_id"], []):
+            b["amount"] = shared_amount
+            b["time"] = settlement_b["time"] + timedelta(hours=random.randint(1, 12))
+ 
+        for row in ground_truth:
+            if row["payment_id"] in {payment_a["payment_id"], payment_b["payment_id"]}:
+                row["truth"] = "AMOUNT_COLLISION"
+ 
+    return settlements, bank_statements, ground_truth
     
 
 payments=generate_payments(num_transactions)
@@ -233,6 +278,9 @@ bank_statements, ground_truth = inject_amount_mismatches(
 )
 bank_statements, ground_truth = inject_duplicate_payments(
     payments, bank_statements, ground_truth
+)
+settlements, bank_statements, ground_truth = inject_amount_collisions(
+    payments, settlements, bank_statements, ground_truth, count=10
 )
 bank_statements = inject_unmatched_bank_credits(bank_statements, count=15)
 bank_statements_input=generate_bankStatement_input(bank_statements)
@@ -257,3 +305,10 @@ print(len(pd.read_csv("data/payments.csv")))
 print(len(pd.read_csv("data/settlements.csv")))
 print(len(pd.read_csv("data/bank_statements.csv")))
 print(len(pd.read_csv("data/ground_truth.csv")))
+
+import collections
+ids = [b["payment_id"] for b in bank_statements if b["payment_id"] is not None]
+dupes = [k for k,v in collections.Counter(ids).items() if v>1]
+print("distinct payment_ids appearing >1 time in bank_statements:", len(dupes))
+gt = pd.read_csv("data/ground_truth.csv")
+print("DUPLICATE_PAYMENT rows in ground_truth:", (gt["truth"]=="DUPLICATE_PAYMENT").sum())
