@@ -1,0 +1,36 @@
+{
+  "exception_id": "EX-0001",
+  "timestamp": "2026-09-03T19:13:01.265382+00:00",
+  "input_records": [
+    "2edff02e-7531-4081-b4ef-fa296b1205aa",
+    "e3f713a7-0de9-4f1b-bc02-24e595c89b2d"
+  ],
+  "exception_status": "PARTIAL_PAYMENT",
+  "match_confidence": null,
+  "tools_called": [
+    "lookup_records",
+    "check_timeline",
+    "calculate_exposure"
+  ],
+  "investigation_result": {
+    "exception_type": "PARTIAL_PAYMENT",
+    "risk_factors": [
+      "Bank credited amount (1,590,580.08 INR) is significantly less than the settlement amount (6,362,320.30 INR).",
+      "There was an extended delay of 42.3 days between the payment initiation and the settlement, exceeding the normal settlement window of 2 days."
+    ],
+    "evidence_cited": [
+      "cac5b68c-28f4-4481-a0a0-4dc427209bdf",
+      "e3f713a7-0de9-4f1b-bc02-24e595c89b2d",
+      "2edff02e-7531-4081-b4ef-fa296b1205aa",
+      "10435a10-98ae-4334-ac12-ace8ae340454"
+    ],
+    "investigation_confidence": 1.0,
+    "suggested_resolution": "The finance team should investigate the reason for the significant discrepancy between the settlement amount and the bank credited amount. This may involve contacting the bank or payment processor to understand why only a partial payment was received and to initiate recovery of the missing funds. Additionally, the team should investigate the cause of the 42.3-day delay between payment initiation and settlement.",
+    "reason": "The exception occurred because the bank statement record (ID: 2edff02e-7531-4081-b4ef-fa296b1205aa) shows a credited amount of 1,590,580.08 INR, which is substantially less than the expected settlement amount of 6,362,320.30 INR (Settlement ID: e3f713a7-0de9-4f1b-bc02-24e595c89b2d). This resulted in a variance of 4,771,740.22 INR, indicating a partial payment. Furthermore, the payment (ID: cac5b68c-28f4-4481-a0a0-4dc427209bdf) took 42.3 days to settle, which is significantly longer than the normal 2-day settlement window."
+  },
+  "investigation_confidence": 1.0,
+  "severity": "CRITICAL",
+  "assigned_team": "Customer Support",
+  "processing_time_seconds": 18.948,
+  "policy_version": "v1.0"
+}

@@ -382,7 +382,7 @@ if __name__ == "__main__":
             "bank_amount": [None] * len(truly_missing),
             "settlement_amount": [None] * len(truly_missing),
             "status": ["MISSING_SETTLEMENT"] * len(truly_missing),
-            "payment_id": truly_missing["payment_id"].tolist(),
+            "payment_id": truly_missing["payment_id"].values,
         }
     )
 
