@@ -1,0 +1,39 @@
+{
+  "exception_id": "EX-da9b62b69d",
+  "timestamp": "2026-09-05T09:27:29.788278+00:00",
+  "input_records": [
+    "c7c432a0-c3af-4d93-8047-6d80532bd70a",
+    "86d4aba8-805f-4892-bc79-5dd973d12f3e"
+  ],
+  "exception_status": "AMOUNT_MISMATCH",
+  "match_confidence": null,
+  "tools_called": [
+    "lookup_records",
+    "check_timeline",
+    "calculate_exposure"
+  ],
+  "investigation_result": {
+    "exception_type": "AMOUNT_MISMATCH",
+    "risk_factors": [
+      "Bank credited an amount less than the settlement amount.",
+      "Variance of 42.42 between settlement and bank statement."
+    ],
+    "evidence_cited": [
+      "2db69edb-42de-4fcc-b86c-2ca2e08596db",
+      "86d4aba8-805f-4892-bc79-5dd973d12f3e",
+      "c7c432a0-c3af-4d93-8047-6d80532bd70a"
+    ],
+    "investigation_confidence": 1.0,
+    "suggested_resolution": "The finance team should investigate the 42.42 discrepancy between the settlement amount and the bank credited amount. This may involve checking for bank fees, currency conversion differences, or data entry errors.",
+    "reason": "The bank statement record (ID: c7c432a0-c3af-4d93-8047-6d80532bd70a) shows a credited amount of 627182.2, which is 42.42 less than the corresponding settlement record (ID: 86d4aba8-805f-4892-bc79-5dd973d12f3e) of 627224.6178827962. This constitutes an amount mismatch."
+  },
+  "investigation_confidence": 1.0,
+  "severity": "LOW",
+  "assigned_team": "Finance Review",
+  "policy_action": "FINANCE_REVIEW",
+  "amount_at_risk": 42.42,
+  "overdue_days": 0,
+  "evidence_warnings": [],
+  "processing_time_seconds": 11.269,
+  "policy_version": "v1.0"
+}

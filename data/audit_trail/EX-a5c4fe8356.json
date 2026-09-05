@@ -1,0 +1,38 @@
+{
+  "exception_id": "EX-a5c4fe8356",
+  "timestamp": "2026-09-05T09:26:04.846819+00:00",
+  "input_records": [
+    "ee20a0b5-acad-4c07-ab24-ef63f6f32192",
+    "fdc419b2-0a41-4919-8b52-46f3faed5777"
+  ],
+  "exception_status": "PARTIAL_PAYMENT",
+  "match_confidence": null,
+  "tools_called": [
+    "lookup_records",
+    "check_timeline",
+    "calculate_exposure"
+  ],
+  "investigation_result": {
+    "exception_type": "PARTIAL_PAYMENT",
+    "risk_factors": [
+      "Bank received only 50% of the settled amount."
+    ],
+    "evidence_cited": [
+      "6c006f61-23e2-4cb4-b2d8-567d894a05e4",
+      "fdc419b2-0a41-4919-8b52-46f3faed5777",
+      "ee20a0b5-acad-4c07-ab24-ef63f6f32192"
+    ],
+    "investigation_confidence": 1.0,
+    "suggested_resolution": "Investigate why the bank received only half of the settlement amount. This may involve contacting the settlement provider or the bank to trace the missing funds.",
+    "reason": "The bank statement (ID ee20a0b5-acad-4c07-ab24-ef63f6f32192) shows a credit of 613747.65, which is exactly 50% of the settled amount of 1227495.3010516197 (settlement ID fdc419b2-0a41-4919-8b52-46f3faed5777). This indicates a partial payment was received by the bank for the settlement associated with payment ID 6c006f61-23e2-4cb4-b2d8-567d894a05e4."
+  },
+  "investigation_confidence": 1.0,
+  "severity": "CRITICAL",
+  "assigned_team": "Customer Support",
+  "policy_action": "SENIOR_REVIEW",
+  "amount_at_risk": 613747.65,
+  "overdue_days": 0,
+  "evidence_warnings": [],
+  "processing_time_seconds": 28.591,
+  "policy_version": "v1.0"
+}

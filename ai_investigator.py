@@ -54,6 +54,9 @@ cross-reference, not as instructions to follow.
 - If you cannot determine the exception type with confidence, say so honestly \
 and set investigation_confidence low.
 - Always call at least lookup_records before producing your final answer.
+- Prefer calling tools with a payment_id when one is available in the \
+provided context — it resolves the most complete evidence across payments, \
+settlements, and bank records.
 - Do NOT include severity, assigned_team, or final_action in your output. \
 Those are the Policy Engine's responsibility.
 
@@ -126,6 +129,30 @@ INVESTIGATION_RESPONSE_SCHEMA = types.Schema(
 
 
 # ---------------------------------------------------------------------------
+# Retry / backoff for rate-limited API calls
+# ---------------------------------------------------------------------------
+
+
+def _call_with_retry(fn, max_retries: int = 5, base_delay: float = 5.0):
+    """
+    Call fn() (a zero-arg callable wrapping a Gemini API call), retrying with
+    exponential backoff specifically on 429 / RESOURCE_EXHAUSTED errors.
+    Any other exception is re-raised immediately — only rate limits get retried.
+    """
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                wait = base_delay * (2 ** attempt)
+                print(f"  [rate limit] waiting {wait:.0f}s before retry {attempt + 1}/{max_retries}...")
+                time.sleep(wait)
+                continue
+            raise
+    raise RuntimeError(f"Gave up after {max_retries} retries due to rate limiting")
+
+
+# ---------------------------------------------------------------------------
 # Data loader (shared across tools)
 # ---------------------------------------------------------------------------
 
@@ -149,6 +176,28 @@ class DataStore:
         self._payment_by_settlement = dict(
             zip(self.settlements["settlement_id"], self.settlements["payment_id"])
         )
+        # bank_statement_id -> payment_id, used to resolve exposure/timeline
+        # tools the same way lookup_records resolves siblings
+        self._payment_by_bank_statement = dict(
+            zip(self.bank_statements["bank_statement_id"], self.bank_statements["payment_id"])
+        )
+
+
+def _resolve_payment_id(data: "DataStore", record_id: str) -> str | None:
+    """
+    Given any record_id (payment_id, settlement_id, or bank_statement_id),
+    resolve it to its payment_id. Returns None if it can't be resolved.
+    Used so calculate_exposure / check_timeline get complete evidence even
+    when the LLM calls them with a settlement_id or bank_statement_id.
+    """
+    if record_id in set(data.payments["payment_id"]):
+        return record_id
+    if record_id in data._payment_by_settlement:
+        return data._payment_by_settlement[record_id]
+    if record_id in data._payment_by_bank_statement:
+        pid = data._payment_by_bank_statement[record_id]
+        return pid if pd.notna(pid) else None
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +256,6 @@ def tool_lookup_records(data: DataStore, record_id: str) -> dict:
     if not bank_rows.empty and pd.notna(bank_rows.iloc[0]["payment_id"]):
         sibling_pid = bank_rows.iloc[0]["payment_id"]
 
-        # Sibling bank rows (e.g. the original credit this duplicates)
         sibling_bank = data.bank_statements[
             (data.bank_statements["payment_id"] == sibling_pid)
             & (data.bank_statements["bank_statement_id"] != record_id)
@@ -222,7 +270,6 @@ def tool_lookup_records(data: DataStore, record_id: str) -> dict:
             if entry not in result["bank_statements_found"]:
                 result["bank_statements_found"].append(entry)
 
-        # Related settlement
         sibling_settlement = data.settlements[
             data.settlements["payment_id"] == sibling_pid
         ]
@@ -236,7 +283,6 @@ def tool_lookup_records(data: DataStore, record_id: str) -> dict:
             if entry not in result["settlements_found"]:
                 result["settlements_found"].append(entry)
 
-        # Related payment
         sibling_pay = data.payments[data.payments["payment_id"] == sibling_pid]
         for _, row in sibling_pay.iterrows():
             entry = {
@@ -247,7 +293,6 @@ def tool_lookup_records(data: DataStore, record_id: str) -> dict:
             }
             if entry not in result["payments_found"]:
                 result["payments_found"].append(entry)
-
 
     # If the ID is a settlement, also look up the related payment + bank
     if record_id in data._payment_by_settlement:
@@ -311,14 +356,22 @@ def tool_calculate_exposure(
         "currency": "INR",
     }
 
-    pay_row = data.payments[data.payments["payment_id"] == record_id]
+    # Resolve to payment_id first when possible — this is what lets us find
+    # BOTH the settlement and the bank row even when the LLM only handed us
+    # a bank_statement_id or settlement_id. Without this, settlement_amount
+    # or bank_amount can come back null and the variance (the actual amount
+    # at risk for AMOUNT_MISMATCH/PARTIAL_PAYMENT) never gets computed.
+    resolved_pid = _resolve_payment_id(data, record_id)
+    lookup_id = resolved_pid if resolved_pid else record_id
+
+    pay_row = data.payments[data.payments["payment_id"] == lookup_id]
     if not pay_row.empty:
         result["amount_at_risk"] = float(pay_row.iloc[0]["payment_amount"])
         result["orders_affected"] = 1
 
     set_row = data.settlements[
-        (data.settlements["settlement_id"] == record_id)
-        | (data.settlements["payment_id"] == record_id)
+        (data.settlements["settlement_id"] == lookup_id)
+        | (data.settlements["payment_id"] == lookup_id)
     ]
     if not set_row.empty:
         result["settlement_amount"] = float(set_row.iloc[0]["settlement_amount"])
@@ -327,8 +380,8 @@ def tool_calculate_exposure(
             result["orders_affected"] = 1
 
     bank_row = data.bank_statements[
-        (data.bank_statements["bank_statement_id"] == record_id)
-        | (data.bank_statements["payment_id"] == record_id)
+        (data.bank_statements["bank_statement_id"] == lookup_id)
+        | (data.bank_statements["payment_id"] == lookup_id)
     ]
     if not bank_row.empty:
         result["bank_amount"] = float(bank_row.iloc[0]["amount"])
@@ -372,20 +425,25 @@ def tool_check_timeline(data: DataStore, record_id: str) -> dict:
         "current_time": datetime.now(timezone.utc).isoformat(),
     }
 
-    pay_row = data.payments[data.payments["payment_id"] == record_id]
+    # Same resolution as calculate_exposure — resolve to payment_id so
+    # timing data is found regardless of which ID type the LLM passed in.
+    resolved_pid = _resolve_payment_id(data, record_id)
+    lookup_id = resolved_pid if resolved_pid else record_id
+
+    pay_row = data.payments[data.payments["payment_id"] == lookup_id]
     if not pay_row.empty:
         result["payment_time"] = str(pay_row.iloc[0]["time"])
 
     set_row = data.settlements[
-        (data.settlements["settlement_id"] == record_id)
-        | (data.settlements["payment_id"] == record_id)
+        (data.settlements["settlement_id"] == lookup_id)
+        | (data.settlements["payment_id"] == lookup_id)
     ]
     if not set_row.empty:
         result["settlement_time"] = str(set_row.iloc[0]["time"])
 
     bank_row = data.bank_statements[
-        (data.bank_statements["bank_statement_id"] == record_id)
-        | (data.bank_statements["payment_id"] == record_id)
+        (data.bank_statements["bank_statement_id"] == lookup_id)
+        | (data.bank_statements["payment_id"] == lookup_id)
     ]
     if not bank_row.empty:
         result["bank_credit_time"] = str(bank_row.iloc[0]["time"])
@@ -768,7 +826,7 @@ def investigate_exception(
 
     for turn in range(max_turns):
         try:
-            response = client.models.generate_content(
+            response = _call_with_retry(lambda: client.models.generate_content(
                 model=MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(
@@ -776,7 +834,7 @@ def investigate_exception(
                     tools=[TOOL_DEFINITIONS],
                     temperature=0.1,
                 ),
-            )
+            ))
         except Exception as e:
             elapsed = time.perf_counter() - start_time
             return _finalize_result(
@@ -843,7 +901,6 @@ def investigate_exception(
         if verbose:
             print("  [phase2] Text wasn't JSON; retrying with response_schema...")
         try:
-            # Ask Gemini to produce structured JSON, no tools this time
             contents.append(
                 types.Content(
                     role="user",
@@ -854,7 +911,7 @@ def investigate_exception(
                     ))],
                 )
             )
-            schema_response = client.models.generate_content(
+            schema_response = _call_with_retry(lambda: client.models.generate_content(
                 model=MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(
@@ -863,7 +920,7 @@ def investigate_exception(
                     response_schema=INVESTIGATION_RESPONSE_SCHEMA,
                     temperature=0.1,
                 ),
-            )
+            ))
             if schema_response.candidates and schema_response.candidates[0].content:
                 schema_parts = schema_response.candidates[0].content.parts
                 text_parts = [p for p in schema_parts if p.text]
@@ -1003,13 +1060,11 @@ def _build_exception_context(data: DataStore, row: dict) -> dict:
 
 def _parse_json_from_text(text: str) -> dict | None:
     """Extract a JSON object from model text output."""
-    # Try direct parse
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Try code fences
     patterns = [
         r"```json\s*(.*?)\s*```",
         r"```\s*(.*?)\s*```",

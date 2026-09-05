@@ -1,0 +1,30 @@
+{
+  "exception_id": "EX-8f0e5e07f7",
+  "timestamp": "2026-09-05T09:49:11.241422+00:00",
+  "input_records": [
+    "f129ed2f-25ec-47e4-a3bd-d4d60a01d8b6",
+    "01b1c626-16a4-4bfa-a032-9ee6c190b0cf"
+  ],
+  "exception_status": "PARTIAL_PAYMENT",
+  "match_confidence": null,
+  "tools_called": [],
+  "investigation_result": {
+    "exception_type": "PARTIAL_PAYMENT",
+    "risk_factors": [
+      "AI investigation did not produce valid output"
+    ],
+    "evidence_cited": [],
+    "investigation_confidence": 0.0,
+    "suggested_resolution": "MANUAL_REVIEW",
+    "reason": "Investigation failed: API error: Gave up after 5 retries due to rate limiting"
+  },
+  "investigation_confidence": 0.0,
+  "severity": "CRITICAL",
+  "assigned_team": "Customer Support",
+  "policy_action": "MANUAL_REVIEW",
+  "amount_at_risk": 852198.03,
+  "overdue_days": 0,
+  "evidence_warnings": [],
+  "processing_time_seconds": 157.88,
+  "policy_version": "v1.0"
+}

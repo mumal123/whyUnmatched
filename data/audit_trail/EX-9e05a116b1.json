@@ -1,0 +1,30 @@
+{
+  "exception_id": "EX-9e05a116b1",
+  "timestamp": "2026-09-05T09:41:05.042802+00:00",
+  "input_records": [
+    "cb5d2aff-0f90-47d5-90f0-d47cf4af8005",
+    "82f552c8-9ae6-4149-9a69-78cf51589375"
+  ],
+  "exception_status": "AMOUNT_MISMATCH",
+  "match_confidence": null,
+  "tools_called": [],
+  "investigation_result": {
+    "exception_type": "AMOUNT_MISMATCH",
+    "risk_factors": [
+      "AI investigation did not produce valid output"
+    ],
+    "evidence_cited": [],
+    "investigation_confidence": 0.0,
+    "suggested_resolution": "MANUAL_REVIEW",
+    "reason": "Investigation failed: API error: Gave up after 5 retries due to rate limiting"
+  },
+  "investigation_confidence": 0.0,
+  "severity": "LOW",
+  "assigned_team": "Finance Review",
+  "policy_action": "MANUAL_REVIEW",
+  "amount_at_risk": 40.55,
+  "overdue_days": 0,
+  "evidence_warnings": [],
+  "processing_time_seconds": 163.104,
+  "policy_version": "v1.0"
+}

@@ -1,0 +1,39 @@
+{
+  "exception_id": "EX-1bb8b95088",
+  "timestamp": "2026-09-05T09:27:14.511266+00:00",
+  "input_records": [
+    "0a4e3ccf-48ef-40ff-b087-77b41c54956f",
+    "f06bffa4-bcc4-4087-ba7e-8c31a6276167"
+  ],
+  "exception_status": "PARTIAL_PAYMENT",
+  "match_confidence": null,
+  "tools_called": [
+    "lookup_records",
+    "check_timeline",
+    "calculate_exposure"
+  ],
+  "investigation_result": {
+    "exception_type": "PARTIAL_PAYMENT",
+    "risk_factors": [
+      "Significant discrepancy between settlement amount and bank credited amount.",
+      "Long delay (112.6 days) between payment initiation and settlement."
+    ],
+    "evidence_cited": [
+      "ecab3301-bc8f-4d29-adea-94930658663a",
+      "f06bffa4-bcc4-4087-ba7e-8c31a6276167",
+      "0a4e3ccf-48ef-40ff-b087-77b41c54956f"
+    ],
+    "investigation_confidence": 1.0,
+    "suggested_resolution": "Investigate the reason for the discrepancy between the settled amount and the amount credited by the bank. This may involve contacting the bank or the payment processor to understand why only a partial amount was received.",
+    "reason": "The payment with ID 'ecab3301-bc8f-4d29-adea-94930658663a' was for 4163565.0. It was settled for 4107678.41. However, the bank statement '0a4e3ccf-48ef-40ff-b087-77b41c54956f' only shows a credited amount of 1026919.6. This significant difference of 3080758.81 between the settled amount and the bank credited amount indicates a partial payment."
+  },
+  "investigation_confidence": 1.0,
+  "severity": "CRITICAL",
+  "assigned_team": "Customer Support",
+  "policy_action": "SENIOR_REVIEW",
+  "amount_at_risk": 3080758.81,
+  "overdue_days": 0,
+  "evidence_warnings": [],
+  "processing_time_seconds": 47.145,
+  "policy_version": "v1.0"
+}

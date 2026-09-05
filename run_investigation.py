@@ -8,6 +8,7 @@ Usage:
     python run_investigation.py --limit 5          # process first 5 only
     python run_investigation.py --limit 1 --verbose  # debug a single one
     python run_investigation.py --dry-run          # show exceptions without calling API
+    python run_investigation.py --force            # re-investigate even if already saved
 """
 
 import sys
@@ -33,7 +34,11 @@ from ai_investigator import (
     investigate_exception,
     stable_exception_id,
 )
-from audit_trail import create_audit_entry, save_audit_entry, save_audit_summary
+from audit_trail import create_audit_entry, save_audit_entry, save_audit_summary, AUDIT_DIR
+
+# Delay between exceptions to stay under free-tier rate limits proactively,
+# rather than only reacting to 429s after they happen.
+DELAY_BETWEEN_EXCEPTIONS_SECONDS = 4.0
 
 
 def format_inr(amount: float) -> str:
@@ -77,11 +82,39 @@ def run_dry_run(exceptions_df: pd.DataFrame):
     print(f"Run without --dry-run to start AI investigation.\n")
 
 
+def _load_existing_audit_entries(exc_ids: set) -> dict:
+    """
+    Load audit entries already saved to disk, keyed by exception_id.
+    Only returns entries that represent a GENUINE completed investigation —
+    an entry saved after a fallback (API error, empty response, invalid JSON)
+    always has a reason starting with "Investigation failed:", set by
+    _make_fallback_output. Those are excluded here so they get retried on
+    the next run instead of being skipped forever.
+    """
+    existing = {}
+    if not os.path.isdir(AUDIT_DIR):
+        return existing
+    for exc_id in exc_ids:
+        path = os.path.join(AUDIT_DIR, f"{exc_id}.json")
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    entry = json.load(fh)
+            except (json.JSONDecodeError, OSError):
+                continue
+            reason = entry.get("investigation_result", {}).get("reason", "")
+            if reason.startswith("Investigation failed:"):
+                continue  # saved failure — retry it, don't skip
+            existing[exc_id] = entry
+    return existing
+
+
 def run_investigation(
     data: DataStore,
     exceptions_df: pd.DataFrame,
     api_key: str,
     verbose: bool = False,
+    force: bool = False,
 ):
     """Run AI investigation on all exceptions and produce audit trail."""
     total = len(exceptions_df)
@@ -99,7 +132,13 @@ def run_investigation(
     print(f"INVESTIGATING {total} EXCEPTIONS")
     print(f"{'='*60}\n")
 
-    # Priority 4 — Create Gemini client ONCE, reuse for all exceptions
+    # Resume support: skip exceptions already saved to disk, unless --force
+    exc_id_by_row = {i: stable_exception_id(row.to_dict()) for i, (_, row) in enumerate(exceptions_df.iterrows())}
+    existing = {} if force else _load_existing_audit_entries(set(exc_id_by_row.values()))
+    if existing and not force:
+        print(f"Found {len(existing)} already-investigated exceptions on disk — skipping them.")
+        print(f"Use --force to re-investigate everything.\n")
+
     client = genai.Client(api_key=api_key)
 
     pipeline_start = time.perf_counter()
@@ -107,44 +146,95 @@ def run_investigation(
     for i, (_, row) in enumerate(exceptions_df.iterrows()):
         exception_dict = row.to_dict()
         status = exception_dict.get("status", "UNKNOWN")
+        exc_id = exc_id_by_row[i]
 
-        # Priority 9 — Stable, reproducible exception ID
-        exc_id = stable_exception_id(exception_dict)
-
-        # Priority 17 — Clear per-investigation logging
         print(f"[{i+1}/{total}] {exc_id} | {status}...", end=" ", flush=True)
 
-        # Priority 5/12 — Per-exception error handling (never crash entire run)
-        try:
-            result = investigate_exception(
-                data, exception_dict, client, verbose=verbose
-            )
-        except Exception as e:
-            # Safe fallback for unexpected errors
-            print(f"ERROR: {str(e)[:60]}")
+        if not force and exc_id in existing:
+            audit = existing[exc_id]
+            inv = audit["investigation_result"]
             result = {
-                "investigation_result": {
-                    "exception_type": "UNKNOWN",
-                    "risk_factors": [f"Investigation crashed: {str(e)[:100]}"],
-                    "evidence_cited": [],
-                    "investigation_confidence": 0.0,
-                    "suggested_resolution": "MANUAL_REVIEW",
-                    "reason": f"Investigation failed with error: {str(e)[:200]}",
-                },
-                "severity": "MEDIUM",
-                "assigned_team": "Finance Review",
-                "policy_action": "MANUAL_REVIEW",
-                "tools_called": [],
-                "amount_at_risk": 0.0,
-                "overdue_days": 0.0,
-                "evidence_warnings": [],
-                "processing_time_seconds": 0.0,
+                "investigation_result": inv,
+                "severity": audit["severity"],
+                "assigned_team": audit["assigned_team"],
+                "policy_action": audit["policy_action"],
+                "tools_called": audit["tools_called"],
+                "amount_at_risk": audit["amount_at_risk"],
+                "overdue_days": audit["overdue_days"],
+                "evidence_warnings": audit["evidence_warnings"],
+                "processing_time_seconds": audit["processing_time_seconds"],
             }
+            print("already investigated, skipping")
+        else:
+            try:
+                result = investigate_exception(
+                    data, exception_dict, client, verbose=verbose
+                )
+            except Exception as e:
+                print(f"ERROR: {str(e)[:60]}")
+                result = {
+                    "investigation_result": {
+                        "exception_type": "UNKNOWN",
+                        "risk_factors": [f"Investigation crashed: {str(e)[:100]}"],
+                        "evidence_cited": [],
+                        "investigation_confidence": 0.0,
+                        "suggested_resolution": "MANUAL_REVIEW",
+                        "reason": f"Investigation failed with error: {str(e)[:200]}",
+                    },
+                    "severity": "MEDIUM",
+                    "assigned_team": "Finance Review",
+                    "policy_action": "MANUAL_REVIEW",
+                    "tools_called": [],
+                    "amount_at_risk": 0.0,
+                    "overdue_days": 0.0,
+                    "evidence_warnings": [],
+                    "processing_time_seconds": 0.0,
+                }
+
+            inv = result["investigation_result"]
+
+            input_records = []
+            for col in ("bank_statement_id", "settlement_id", "payment_id"):
+                val = exception_dict.get(col)
+                if pd.notna(val):
+                    input_records.append(str(val))
+
+            audit = create_audit_entry(
+                exception_id=exc_id,
+                input_records=input_records,
+                exception_status=status,
+                match_confidence=None,
+                tools_called=result["tools_called"],
+                investigation_result=inv,
+                severity=result["severity"],
+                assigned_team=result["assigned_team"],
+                policy_action=result["policy_action"],
+                amount_at_risk=result["amount_at_risk"],
+                overdue_days=result["overdue_days"],
+                evidence_warnings=result["evidence_warnings"],
+                processing_time_seconds=result["processing_time_seconds"],
+            )
+            save_audit_entry(audit)
+
+            conf = inv.get("investigation_confidence", 0)
+            warn_flag = " [!]" if result["evidence_warnings"] else ""
+            print(
+                f"severity={result['severity']:<8s} "
+                f"conf={conf:.2f}  "
+                f"action={result['policy_action']:<15s} "
+                f"tools={len(result['tools_called'])}  "
+                f"time={result['processing_time_seconds']:.1f}s"
+                f"{warn_flag}"
+            )
+
+            # Proactive delay to stay under free-tier rate limits
+            if i < total - 1:
+                time.sleep(DELAY_BETWEEN_EXCEPTIONS_SECONDS)
 
         inv = result["investigation_result"]
         results.append(result)
+        audit_entries.append(audit)
 
-        # Track metrics
         sev = result["severity"]
         severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
@@ -160,52 +250,10 @@ def run_investigation(
         total_money += result["amount_at_risk"]
         total_api_time += result["processing_time_seconds"]
 
-        # Collect input record IDs for audit
-        input_records = []
-        for col in ("bank_statement_id", "settlement_id", "payment_id"):
-            val = exception_dict.get(col)
-            if pd.notna(val):
-                input_records.append(str(val))
-
-        # Create audit entry
-        audit = create_audit_entry(
-            exception_id=exc_id,
-            input_records=input_records,
-            exception_status=status,
-            match_confidence=None,  # fuzzy matcher doesn't export this yet
-            tools_called=result["tools_called"],
-            investigation_result=inv,
-            severity=result["severity"],
-            assigned_team=result["assigned_team"],
-            policy_action=result["policy_action"],
-            amount_at_risk=result["amount_at_risk"],
-            overdue_days=result["overdue_days"],
-            evidence_warnings=result["evidence_warnings"],
-            processing_time_seconds=result["processing_time_seconds"],
-        )
-        audit_entries.append(audit)
-        save_audit_entry(audit)
-
-        # Priority 17 — Per-investigation summary line
-        conf = inv.get("investigation_confidence", 0)
-        warn_flag = " [!]" if result["evidence_warnings"] else ""
-        print(
-            f"severity={sev:<8s} "
-            f"conf={conf:.2f}  "
-            f"action={action:<15s} "
-            f"tools={len(result['tools_called'])}  "
-            f"time={result['processing_time_seconds']:.1f}s"
-            f"{warn_flag}"
-        )
-
     pipeline_elapsed = time.perf_counter() - pipeline_start
 
-    # Save consolidated summary
     summary_path = save_audit_summary(audit_entries)
 
-    # ---------------------------------------------------------------
-    # Print report
-    # ---------------------------------------------------------------
     print(f"\n{'='*60}")
     print(f"INVESTIGATION REPORT")
     print(f"{'='*60}")
@@ -236,7 +284,6 @@ def run_investigation(
     for action, count in sorted(action_counts.items(), key=lambda x: -x[1]):
         print(f"   {action:<25s} {count:>4d}")
 
-    # AI resolution stats
     confident_count = sum(
         1 for r in results
         if r["investigation_result"].get("investigation_confidence", 0) >= 0.7
@@ -251,7 +298,6 @@ def run_investigation(
     print(f"   Low confidence (<0.50):   {low_confidence}/{total}")
     print(f"   Total API time:           {total_api_time:.1f}s")
 
-    # Show unresolved (low confidence) — NEVER hide these (Priority 15/18)
     print(f"\n{'-'*60}")
     print(f"UNRESOLVED / LOW CONFIDENCE EXCEPTIONS")
     print(f"{'-'*60}")
@@ -273,7 +319,6 @@ def run_investigation(
     else:
         print("   None -- all exceptions investigated with confidence >= 0.50")
 
-    # Show evidence warnings
     warned = [
         (audit_entries[i], results[i])
         for i in range(total)
@@ -313,9 +358,13 @@ def main():
         action="store_true",
         help="Show what would be investigated without calling API",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-investigate exceptions even if already saved to the audit trail",
+    )
     args = parser.parse_args()
 
-    # Check API key
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not api_key and not args.dry_run:
         print("Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable")
@@ -324,11 +373,9 @@ def main():
         print("Or use --dry-run to preview without API calls.")
         exit(1)
 
-    # Load data
     print("Loading data...")
     data = DataStore()
 
-    # Get exceptions — Priority 6/16: ONLY non-MATCH records
     all_exceptions = data.final_recon[data.final_recon["status"] != "MATCH"].copy()
     print(f"Found {len(all_exceptions)} exceptions in final_reconciliation.csv")
 
@@ -340,7 +387,7 @@ def main():
         run_dry_run(all_exceptions)
         return
 
-    run_investigation(data, all_exceptions, api_key, verbose=args.verbose)
+    run_investigation(data, all_exceptions, api_key, verbose=args.verbose, force=args.force)
 
 
 if __name__ == "__main__":

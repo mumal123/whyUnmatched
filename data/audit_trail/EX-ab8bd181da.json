@@ -1,0 +1,39 @@
+{
+  "exception_id": "EX-ab8bd181da",
+  "timestamp": "2026-09-05T09:26:23.359398+00:00",
+  "input_records": [
+    "66edef30-2fa8-4808-b8f1-6861e3e3e73b",
+    "b0d508a9-e4b8-4e89-a287-729e12194d94"
+  ],
+  "exception_status": "PARTIAL_PAYMENT",
+  "match_confidence": null,
+  "tools_called": [
+    "lookup_records",
+    "check_timeline",
+    "calculate_exposure"
+  ],
+  "investigation_result": {
+    "exception_type": "PARTIAL_PAYMENT",
+    "risk_factors": [
+      "Settlement amount is less than the original payment amount.",
+      "Bank credited amount is significantly less than the settled amount."
+    ],
+    "evidence_cited": [
+      "702cdd20-2862-48b8-88f4-ef125e9953d2",
+      "b0d508a9-e4b8-4e89-a287-729e12194d94",
+      "66edef30-2fa8-4808-b8f1-6861e3e3e73b"
+    ],
+    "investigation_confidence": 1.0,
+    "suggested_resolution": "Investigate why the settlement amount (8,767,494.31906373 INR) was less than the original payment amount (8,874,162 INR). Separately, investigate why the bank credited amount (6,575,620.74 INR) was less than the settled amount (8,767,494.31906373 INR). Reconcile the missing 2,191,873.58 INR.",
+    "reason": "The original payment (ID: 702cdd20-2862-48b8-88f4-ef125e9953d2) was for 8,874,162 INR. However, the corresponding settlement (ID: b0d508a9-e4b8-4e89-a287-729e12194d94) was for a lesser amount of 8,767,494.31906373 INR. Furthermore, the bank statement (ID: 66edef30-2fa8-4808-b8f1-6861e3e3e73b) shows a credit of only 6,575,620.74 INR, which is significantly less than the settled amount. This indicates a partial payment at two stages: first during settlement and then during the bank credit, resulting in a variance of 2,191,873.58 INR between the settled amount and the bank credited amount."
+  },
+  "investigation_confidence": 1.0,
+  "severity": "CRITICAL",
+  "assigned_team": "Customer Support",
+  "policy_action": "SENIOR_REVIEW",
+  "amount_at_risk": 2191873.58,
+  "overdue_days": 0,
+  "evidence_warnings": [],
+  "processing_time_seconds": 14.507,
+  "policy_version": "v1.0"
+}
