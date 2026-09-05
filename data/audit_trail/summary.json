@@ -1,23 +1,20 @@
 {
-  "generated_at": "2026-09-05T09:18:38.245299+00:00",
+  "generated_at": "2026-09-05T11:33:48.515703+00:00",
   "policy_version": "v1.0",
-  "total_exceptions": 3,
+  "total_exceptions": 1,
   "by_severity": {
-    "CRITICAL": 1,
-    "MEDIUM": 1,
-    "HIGH": 1
+    "CRITICAL": 1
   },
   "by_team": {
-    "Customer Support": 3
+    "Customer Support": 1
   },
   "by_exception_type": {
-    "PARTIAL_PAYMENT": 3
+    "PARTIAL_PAYMENT": 1
   },
   "by_policy_action": {
-    "SENIOR_REVIEW": 2,
-    "FINANCE_REVIEW": 1
+    "SENIOR_REVIEW": 1
   },
-  "total_money_affected": 5122370.26,
+  "total_money_affected": 4771740.22,
   "entries": [
     {
       "exception_id": "EX-25da8e387a",
@@ -58,84 +55,6 @@
       "overdue_days": 0,
       "evidence_warnings": [],
       "processing_time_seconds": 16.06,
-      "policy_version": "v1.0"
-    },
-    {
-      "exception_id": "EX-e4bfda3f50",
-      "timestamp": "2026-09-04T19:24:36.921629+00:00",
-      "input_records": [
-        "77fa7bbc-cc68-453e-9a9f-d637fc7aa2dc",
-        "9c03d65c-ed8a-428c-b756-999b251adf0e"
-      ],
-      "exception_status": "PARTIAL_PAYMENT",
-      "match_confidence": null,
-      "tools_called": [
-        "lookup_records",
-        "check_timeline",
-        "calculate_exposure"
-      ],
-      "investigation_result": {
-        "exception_type": "PARTIAL_PAYMENT",
-        "risk_factors": [
-          "Significant financial discrepancy between expected settlement and actual bank credit.",
-          "Potential loss of funds due to underpayment."
-        ],
-        "evidence_cited": [
-          "877409a9-77d2-4e02-bf01-cf99988c24c9",
-          "9c03d65c-ed8a-428c-b756-999b251adf0e",
-          "77fa7bbc-cc68-453e-9a9f-d637fc7aa2dc"
-        ],
-        "investigation_confidence": 1.0,
-        "suggested_resolution": "The finance team should investigate why the bank credited only a partial amount. This may involve contacting the bank or the payment processor to understand the reason for the discrepancy and recover the missing funds.",
-        "reason": "The bank statement record (ID: 77fa7bbc-cc68-453e-9a9f-d637fc7aa2dc) shows a credited amount of 94216.26, which is exactly half of the expected settlement amount of 188432.51681161331 (ID: 9c03d65c-ed8a-428c-b756-999b251adf0e) for payment ID 877409a9-77d2-4e02-bf01-cf99988c24c9. This indicates a partial payment was received from the bank."
-      },
-      "investigation_confidence": 1.0,
-      "severity": "MEDIUM",
-      "assigned_team": "Customer Support",
-      "policy_action": "FINANCE_REVIEW",
-      "amount_at_risk": 94216.26,
-      "overdue_days": 0,
-      "evidence_warnings": [],
-      "processing_time_seconds": 13.285,
-      "policy_version": "v1.0"
-    },
-    {
-      "exception_id": "EX-c40f8ab353",
-      "timestamp": "2026-09-05T09:18:38.244647+00:00",
-      "input_records": [
-        "038ef7af-67cc-4a38-9feb-c9afb2a86456",
-        "4777be21-7677-4166-9644-e9ae7936931e"
-      ],
-      "exception_status": "PARTIAL_PAYMENT",
-      "match_confidence": null,
-      "tools_called": [
-        "lookup_records",
-        "check_timeline",
-        "calculate_exposure"
-      ],
-      "investigation_result": {
-        "exception_type": "PARTIAL_PAYMENT",
-        "risk_factors": [
-          "Bank credited only a partial amount of the settlement.",
-          "Discrepancy between settlement amount (512827.57) and bank credited amount (256413.79)."
-        ],
-        "evidence_cited": [
-          "b535106e-122c-4a56-81d7-425638602ab6",
-          "4777be21-7677-4166-9644-e9ae7936931e",
-          "038ef7af-67cc-4a38-9feb-c9afb2a86456"
-        ],
-        "investigation_confidence": 1.0,
-        "suggested_resolution": "Investigate why the bank only credited 256413.79 against a settlement of 512827.57. Reconcile the missing 256413.78.",
-        "reason": "The bank statement (ID: 038ef7af-67cc-4a38-9feb-c9afb2a86456) shows a credit of 256413.79, which is approximately half of the expected settlement amount (ID: 4777be21-7677-4166-9644-e9ae7936931e) of 512827.57. This indicates a partial payment was received by the bank, resulting in a variance of 256413.78."
-      },
-      "investigation_confidence": 1.0,
-      "severity": "HIGH",
-      "assigned_team": "Customer Support",
-      "policy_action": "SENIOR_REVIEW",
-      "amount_at_risk": 256413.78,
-      "overdue_days": 0,
-      "evidence_warnings": [],
-      "processing_time_seconds": 9.898,
       "policy_version": "v1.0"
     }
   ]

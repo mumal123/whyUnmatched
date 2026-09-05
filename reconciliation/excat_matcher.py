@@ -5,10 +5,26 @@ import time
 def exact_match(bank_statements, settlements, settlement_delay_days=2):
     start_time = time.perf_counter()
 
+    required_bank = {"bank_statement_id", "amount", "time"}
+    required_settlement = {"settlement_id", "settlement_amount", "time"}
+    missing_bank = required_bank - set(bank_statements.columns)
+    missing_settlement = required_settlement - set(settlements.columns)
+    if missing_bank or missing_settlement:
+        problems = []
+        if missing_bank:
+            problems.append(f"bank statements missing {sorted(missing_bank)}")
+        if missing_settlement:
+            problems.append(f"settlements missing {sorted(missing_settlement)}")
+        raise ValueError("; ".join(problems))
+
     bank_statements = bank_statements.copy()
     settlements = settlements.copy()
     bank_statements["time"] = pd.to_datetime(bank_statements["time"])
     settlements["time"] = pd.to_datetime(settlements["time"])
+    bank_statements["amount"] = pd.to_numeric(bank_statements["amount"], errors="coerce")
+    settlements["settlement_amount"] = pd.to_numeric(
+        settlements["settlement_amount"], errors="coerce"
+    )
 
     # explicit tie-break: preserves the file's original row order (the
     # original bank credit always appears before any duplicate copy),
@@ -27,9 +43,26 @@ def exact_match(bank_statements, settlements, settlement_delay_days=2):
                 (candidates["time_bank"] <= window_end)
     candidates = candidates[in_window]
 
-    candidates = candidates.sort_values(["time_bank", "_row_order"], kind="stable")
-    candidates = candidates.drop_duplicates(subset="settlement_id", keep="first")
-    candidates = candidates.drop_duplicates(subset="bank_statement_id", keep="first")
+    # Resolve candidates in one deterministic pass. Chaining two independent
+    # drop_duplicates calls can discard a settlement's valid second choice
+    # after its first choice was already claimed by another settlement.
+    candidates = candidates.sort_values(
+        ["time_bank", "time_settlement", "_row_order", "settlement_id"],
+        kind="stable",
+    )
+    selected_rows = []
+    used_bank_ids = set()
+    used_settlement_ids = set()
+    for _, candidate in candidates.iterrows():
+        bank_id = candidate["bank_statement_id"]
+        settlement_id = candidate["settlement_id"]
+        if bank_id in used_bank_ids or settlement_id in used_settlement_ids:
+            continue
+        selected_rows.append(candidate)
+        used_bank_ids.add(bank_id)
+        used_settlement_ids.add(settlement_id)
+
+    candidates = pd.DataFrame(selected_rows, columns=candidates.columns)
 
     matched_bank_ids = set(candidates["bank_statement_id"])
     matched_settlement_ids = set(candidates["settlement_id"])

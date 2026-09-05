@@ -1,1 +1,11 @@
+# Local credentials and environment overrides. Commit .env.example only.
 .env
+.env.*
+!.env.example
+
+# Python build artefacts
+__pycache__/
+*.py[cod]
+
+# Data fetched from a Razorpay account can contain merchant-specific records.
+data_razorpay_live/
